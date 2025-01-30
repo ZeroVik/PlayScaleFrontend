@@ -11,6 +11,7 @@ import Footer from './components/Footer';
 import Login from './pages/Login';
 import PlaceOrder from './pages/PlaceOrder';
 import Orders from './pages/Orders';
+import OrderConfirmation from './pages/OrderConfirmation';
 import SearchBar from './components/SearchBar';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -49,6 +50,7 @@ const App: React.FC = () => {
                     <Route path="/category/:categoryId" element={<CategoryPage />} />
                     <Route path="/cart" element={<Cart />} />
                     <Route path="/order" element={<OrderPage />} />
+                    <Route path="/order-confirmation" element={<OrderConfirmation />} />
                     <Route path="/create-product" element={<CreateProduct />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/place-order" element={<PlaceOrder />} />

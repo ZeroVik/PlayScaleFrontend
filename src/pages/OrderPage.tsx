@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { motion, AnimatePresence } from "framer-motion";
+import { FiPackage, FiMapPin, FiLoader, FiShoppingCart } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
+
 
 interface CartItemDTO {
     productId: number;
@@ -13,6 +17,9 @@ interface CartItemDTO {
 interface CartDTO {
     items: CartItemDTO[];
     totalPrice: number;
+    discountAmount: number;
+    grandTotal: number;
+    discountMessage?: string;
 }
 
 const OrderPage: React.FC = () => {
@@ -25,9 +32,9 @@ const OrderPage: React.FC = () => {
         postalCode: "",
         country: "",
     });
+    const navigate = useNavigate();
     const [placingOrder, setPlacingOrder] = useState<boolean>(false);
 
-    // Fetch the cart data
     useEffect(() => {
         const fetchCart = async () => {
             try {
@@ -35,23 +42,19 @@ const OrderPage: React.FC = () => {
                 const userId = localStorage.getItem("userId");
 
                 if (!token || !userId) {
-                    setError("User not authenticated. Please log in.");
+                    setError("Please log in to view your cart");
                     setLoading(false);
                     return;
                 }
 
                 const response = await axios.get<CartDTO>(
                     `https://localhost:7263/api/Cart/${userId}`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
+                    { headers: { Authorization: `Bearer ${token}` } }
                 );
+
                 setCart(response.data);
             } catch (err: any) {
-                console.error("Error fetching cart:", err);
-                setError(err.response?.data?.message || "Failed to load cart. Please try again.");
+                setError(err.response?.data?.message || "Failed to load cart");
             } finally {
                 setLoading(false);
             }
@@ -60,29 +63,22 @@ const OrderPage: React.FC = () => {
         fetchCart();
     }, []);
 
-    // Handle address input changes
     const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        setAddress((prev) => ({ ...prev, [name]: value }));
+        setAddress(prev => ({ ...prev, [name]: value }));
     };
 
-    // Place the order
     const placeOrder = async () => {
         try {
             setPlacingOrder(true);
             const token = localStorage.getItem("token");
             const userId = localStorage.getItem("userId");
 
-            if (!token || !userId) {
-                setError("User not authenticated. Please log in.");
-                setPlacingOrder(false);
-                return;
-            }
+            if (!token || !userId) throw new Error("Authentication required");
 
-            // Payload for the order
             const payload = {
                 userId: Number(userId),
-                orderDetails: cart?.items.map((item) => ({
+                orderDetails: cart?.items.map(item => ({
                     productId: item.productId,
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,
@@ -91,141 +87,205 @@ const OrderPage: React.FC = () => {
                 address,
             };
 
-            console.log("Placing order with payload:", payload);
+            await axios.post("https://localhost:7263/api/orders", payload, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
 
-            // Send order to backend
-            const response = await axios.post(
-                "https://localhost:7263/api/orders",
-                payload,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                }
-            );
-
-            console.log("Order Response:", response.data);
-
-            // Clear cart and navigate to a success page or show confirmation
             setCart(null);
-            sessionStorage.removeItem("cart");
             toast.success("Order placed successfully!");
+            window.location.href = "/order-confirmation";
         } catch (err: any) {
-            console.error("Error placing order:", err);
-            toast.error("Failed to place order. Please try again.");
+            toast.error(err.response?.data?.message || "Failed to place order");
         } finally {
             setPlacingOrder(false);
         }
     };
 
-    // Loading State
     if (loading) {
         return (
-            <div className="text-gray-500 text-center mt-10">
-                <span className="loader"></span> Loading cart...
+            <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-orange-500 to-red-500">
+                <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                    className="h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full"
+                />
             </div>
         );
     }
 
-    // Error State
     if (error) {
-        return <div className="text-red-500 text-center mt-10">{error}</div>;
-    }
-
-    // Empty Cart State
-    if (!cart || cart.items.length === 0) {
         return (
-            <div className="text-gray-500 text-center mt-10">
-                <h2 className="text-xl font-semibold mb-4">Your cart is empty</h2>
-                <p className="text-gray-500 mb-4">
-                    Add items to your cart to place an order.
-                </p>
-                <button
-                    onClick={() => (window.location.href = "/collection")}
-                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                    Browse Products
-                </button>
-            </div>
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-r from-orange-500 to-red-500 p-8"
+            >
+                <div className="max-w-md text-center bg-white p-8 rounded-2xl shadow-xl">
+                    <FiPackage className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">Unable to Load Cart</h2>
+                    <p className="text-gray-600 mb-6">{error}</p>
+                    <button
+                        onClick={() => window.location.href = "/login"}
+                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:opacity-90 transition-opacity"
+                    >
+                        Return to Login
+                    </button>
+                </div>
+            </motion.div>
         );
     }
 
-    // Order Page UI
+    if (!cart?.items.length) {
+        return (
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-r from-orange-500 to-red-500 p-8"
+            >
+                <div className="max-w-md text-center bg-white p-8 rounded-2xl shadow-xl">
+                    <FiShoppingCart className="w-16 h-16 text-blue-500 mx-auto mb-4" />
+                    <h2 className="text-2xl font-bold text-gray-800 mb-4">Your Cart is Empty</h2>
+                    <p className="text-gray-600 mb-6">Add items to your cart to place an order</p>
+                    <button
+                        onClick={() => window.location.href = "/collection"}
+                        className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-lg hover:opacity-90 transition-opacity"
+                    >
+                        Browse Products
+                    </button>
+                </div>
+            </motion.div>
+        );
+    }
+
     return (
-        <div className="container mx-auto mt-10 p-6 bg-white rounded-lg shadow-lg">
-            <h1 className="text-3xl font-bold mb-6 text-center">Order Details</h1>
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="min-h-screen bg-gradient-to-r from-blue-50 to-purple-50 py-12 px-4 sm:px-6 lg:px-8"
+        >
+            <div className="max-w-4xl mx-auto">
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+                    <div className="p-8 bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                        <motion.div
+                            initial={{ x: -20 }}
+                            animate={{ x: 0 }}
+                            className="flex items-center gap-4"
+                        >
+                            <FiPackage className="w-8 h-8" />
+                            <h1 className="text-3xl font-bold">Checkout</h1>
+                        </motion.div>
+                    </div>
 
-            {/* Address Form */}
-            <div className="mb-6">
-                <h2 className="text-xl font-semibold mb-4">Shipping Address</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <input
-                        type="text"
-                        name="street"
-                        placeholder="Street"
-                        value={address.street}
-                        onChange={handleAddressChange}
-                        className="border px-4 py-2 rounded w-full"
-                    />
-                    <input
-                        type="text"
-                        name="city"
-                        placeholder="City"
-                        value={address.city}
-                        onChange={handleAddressChange}
-                        className="border px-4 py-2 rounded w-full"
-                    />
-                    <input
-                        type="text"
-                        name="postalCode"
-                        placeholder="Postal Code"
-                        value={address.postalCode}
-                        onChange={handleAddressChange}
-                        className="border px-4 py-2 rounded w-full"
-                    />
-                    <input
-                        type="text"
-                        name="country"
-                        placeholder="Country"
-                        value={address.country}
-                        onChange={handleAddressChange}
-                        className="border px-4 py-2 rounded w-full"
-                    />
+                    <div className="p-8">
+                        <div className="mb-8">
+                            <h2 className="flex items-center gap-2 text-xl font-semibold mb-4">
+                                <FiMapPin className="w-5 h-5 text-purple-600" />
+                                Shipping Address
+                            </h2>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {Object.entries(address).map(([key, value]) => (
+                                    <motion.div
+                                        key={key}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                    >
+                                        <input
+                                            type="text"
+                                            name={key}
+                                            placeholder={key.charAt(0).toUpperCase() + key.slice(1)}
+                                            value={value}
+                                            onChange={handleAddressChange}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        />
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="mb-8">
+                            <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
+                            <div className="space-y-4">
+                                <AnimatePresence>
+                                    {cart.items.map((item, index) => (
+                                        <motion.div
+                                            key={item.productId}
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            exit={{ opacity: 0 }}
+                                            transition={{ delay: index * 0.05 }}
+                                            className="flex justify-between items-center p-4 bg-gray-50 rounded-lg"
+                                        >
+                                            <div>
+                                                <h3 className="font-medium">{item.productName}</h3>
+                                                <p className="text-sm text-gray-500">
+                                                    {item.quantity} × ${item.unitPrice.toFixed(2)}
+                                                </p>
+                                            </div>
+                                            <span className="font-medium">
+                                                ${item.subtotal.toFixed(2)}
+                                            </span>
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+
+                            {cart.discountAmount > 0 && (
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="mt-6 p-4 bg-green-50 rounded-lg"
+                                >
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <span className="font-medium">Discount</span>
+                                            {cart.discountMessage && (
+                                                <span className="ml-2 text-green-600 text-sm">
+                                                    ({cart.discountMessage})
+                                                </span>
+                                            )}
+                                        </div>
+                                        <span className="font-medium text-green-600">
+                                            -${cart.discountAmount.toFixed(2)}
+                                        </span>
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            <div className="mt-6 pt-4 border-t border-gray-200">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-lg font-bold">Total</span>
+                                    <span className="text-2xl font-bold text-purple-600">
+                                        ${cart.grandTotal.toFixed(2)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <motion.div
+                            whileHover={{ scale: 1.01 }}
+                            className="flex justify-end"
+                        >
+                            <button
+                                onClick={placeOrder}
+                                disabled={placingOrder}
+                                className={`px-6 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-lg font-medium ${
+                                    placingOrder ? "opacity-75 cursor-not-allowed" : "hover:opacity-90"
+                                } transition-opacity`}
+                            >
+                                {placingOrder ? (
+                                    <span className="flex items-center gap-2">
+                                        <FiLoader className="animate-spin" />
+                                        Processing...
+                                    </span>
+                                ) : (
+                                    "Confirm Order"
+                                )}
+                            </button>
+                        </motion.div>
+                    </div>
                 </div>
             </div>
-
-            {/* Cart Summary */}
-            <div className="mb-6">
-                <h2 className="text-xl font-semibold mb-4">Order Summary</h2>
-                <ul className="divide-y divide-gray-200">
-                    {cart.items.map((item) => (
-                        <li key={item.productId} className="flex justify-between py-4">
-                            <span>
-                                {item.quantity} × {item.productName}
-                            </span>
-                            <span>${item.subtotal.toFixed(2)}</span>
-                        </li>
-                    ))}
-                </ul>
-                <div className="mt-4 flex justify-between text-lg font-bold">
-                    <span>Total:</span>
-                    <span>${cart.totalPrice.toFixed(2)}</span>
-                </div>
-            </div>
-
-            {/* Place Order Button */}
-            <div className="text-right">
-                <button
-                    onClick={placeOrder}
-                    disabled={placingOrder}
-                    className={`px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 ${
-                        placingOrder ? "opacity-50 cursor-not-allowed" : ""
-                    }`}
-                >
-                    {placingOrder ? "Placing Order..." : "Place Order"}
-                </button>
-            </div>
-        </div>
+        </motion.div>
     );
 };
 
